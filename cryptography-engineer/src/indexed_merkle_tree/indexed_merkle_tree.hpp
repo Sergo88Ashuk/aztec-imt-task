@@ -81,6 +81,9 @@ class IndexedMerkleTree {
 
     const std::vector<barretenberg::fr>& get_hashes() { return hashes_; }
     const std::vector<leaf>& get_leaves() { return leaves_; }
+    void init_hashes(std::vector<barretenberg::fr>& hashes);
+    void calculate_root(const std::vector<barretenberg::fr>& hashes);
+    void rehash(std::vector<barretenberg::fr>& hashes);
 
   private:
     // The depth or height of the tree
