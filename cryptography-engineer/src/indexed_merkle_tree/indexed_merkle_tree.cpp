@@ -8,7 +8,9 @@ namespace indexed_merkle_tree {
 void IndexedMerkleTree::build_hashes_from_leaves()
 {
     for (size_t i = total_size_; i < hashes_.size(); i++) {
+        // starting index of level, current node belongs to
         size_t level_str_idx{};
+        // starting index of level, current nodes children belong to
         size_t prev_level_str_idx{};
 
         for (size_t l = 0; l < level_str_idxs_.size(); l++) {
@@ -20,16 +22,20 @@ void IndexedMerkleTree::build_hashes_from_leaves()
             }
         }
 
-        auto in_level_idx = i - level_str_idx;
-        auto rch_idx = prev_level_str_idx + in_level_idx * 2;
+        // calculate children indexes
+        auto in_level_idx = (i - level_str_idx) * 2;
+        auto rch_idx = prev_level_str_idx + in_level_idx;
         auto lch_idx = rch_idx + 1;
-        auto rchld = hashes_[rch_idx];
-        auto lchld = hashes_[lch_idx];
 
+        // update hash if some of the child changed it's hash
         if (hstats_[rch_idx] == node_status::DIRTY || hstats_[lch_idx] == node_status::DIRTY) {
+            auto rchld = hashes_[rch_idx];
+            auto lchld = hashes_[lch_idx];
             hashes_[i] = compress_pair(rchld, lchld);
+            // child pair hash, update their statuses
             hstats_[rch_idx] = node_status::CLEAN;
             hstats_[lch_idx] = node_status::CLEAN;
+            // node's hash changed, let its parent be aware of it
             hstats_[i] = node_status::DIRTY;
         }
     }
@@ -62,15 +68,18 @@ IndexedMerkleTree::IndexedMerkleTree(size_t depth)
     hashes_.resize(total_size_ * 2 - 2);
 
     // Exercise: Build the initial state of the entire tree.
+    // Initialize vector of starting indexes for tree levels
     level_str_idxs_.push_back(0);
     for (size_t i = 1; i < depth_; i++) {
         size_t prev = level_str_idxs_[i - 1];
         level_str_idxs_.push_back(prev + (1 << (depth_ - (i - 1))));
     }
 
+    // Inittialize nodes hash statuses
     hstats_.resize(total_size_ * 2 - 2);
     hstats_.assign(hstats_.size(), node_status::DIRTY);
 
+    // Build tree
     leaves_ = { { 0, 0, 0 } };
     init_hashes();
     calculate_root();
@@ -85,9 +94,11 @@ fr_hash_path IndexedMerkleTree::get_hash_path(size_t idx)
     // Exercise: fill the hash path for a given index.
     fr_hash_path path(depth_);
 
+    // get leaves pair
     path[0] = idx % 2 ? std::make_pair(hashes_[idx - 1], hashes_[idx]) : std::make_pair(hashes_[idx], hashes_[idx + 1]);
 
     for (size_t l = 1; l < depth_; l++) {
+        // update index for next level
         size_t parent_idx = idx / 2;
         idx = level_str_idxs_[1] + parent_idx;
         path[l] =
@@ -125,8 +136,10 @@ fr IndexedMerkleTree::update_element(fr const& val)
     index_t next_idx;
     fr next_value;
     size_t idx = 0;
+    // counter to prevent infinite loop
+    size_t loop_cnt = total_size_;
 
-    while (true) {
+    while (loop_cnt) {
         if ((uint64_t)leaves_[idx].nextValue == (uint64_t)val)
             return 0;
 
@@ -139,6 +152,7 @@ fr IndexedMerkleTree::update_element(fr const& val)
         }
 
         idx = static_cast<size_t>(leaves_[idx].nextIndex);
+        loop_cnt--;
     }
 
     leaves_.push_back(leaf({ val, next_idx, next_value }));

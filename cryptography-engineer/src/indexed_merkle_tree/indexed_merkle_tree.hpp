@@ -83,6 +83,7 @@ class IndexedMerkleTree {
     const std::vector<leaf>& get_leaves() { return leaves_; }
 
   private:
+    // helper functions
     void init_hashes();
     void calculate_root();
     void build_hashes_from_leaves();
@@ -105,11 +106,13 @@ class IndexedMerkleTree {
     // Size: total_size_ + (total_size_ / 2) + (total_size_ / 4) + ... + 2 = 2 * total_size_ - 2
     std::vector<barretenberg::fr> hashes_;
 
+    // Vector of starting indexes for tree levels
     std::vector<size_t> level_str_idxs_;
 
+    // Hash statuses for performance optimizations
     enum class node_status : uint8_t {
-        DIRTY = 0,
-        CLEAN = 1,
+        DIRTY = 0, // hash of this node outdated because of the change in leaf
+        CLEAN = 1, // hash of this node is actual no need to rehash
     };
     std::vector<node_status> hstats_;
 };
