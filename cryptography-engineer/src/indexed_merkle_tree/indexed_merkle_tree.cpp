@@ -10,6 +10,7 @@ void IndexedMerkleTree::build_hashes_from_leaves()
     for (size_t i = total_size_; i < hashes_.size(); i++) {
         size_t level_str_idx{};
         size_t prev_level_str_idx{};
+
         for (size_t l = 0; l < level_str_idxs_.size(); l++) {
             auto lsi = level_str_idxs_[l];
             if (i >= lsi) {
@@ -18,16 +19,23 @@ void IndexedMerkleTree::build_hashes_from_leaves()
                     prev_level_str_idx = level_str_idxs_[l - 1];
             }
         }
+
         auto in_level_idx = i - level_str_idx;
-        auto ch_base_idx = prev_level_str_idx + in_level_idx * 2;
-        auto rchld = hashes_[ch_base_idx];
-        auto lchld = hashes_[ch_base_idx + 1];
-        hashes_[i] = compress_pair(rchld, lchld);
+        auto rch_idx = prev_level_str_idx + in_level_idx * 2;
+        auto lch_idx = rch_idx + 1;
+        auto rchld = hashes_[rch_idx];
+        auto lchld = hashes_[lch_idx];
+
+        if (hstats_[rch_idx] == node_status::DIRTY || hstats_[lch_idx] == node_status::DIRTY) {
+            hashes_[i] = compress_pair(rchld, lchld);
+            hstats_[rch_idx] = node_status::CLEAN;
+            hstats_[lch_idx] = node_status::CLEAN;
+            hstats_[i] = node_status::DIRTY;
+        }
     }
 }
 void IndexedMerkleTree::init_hashes()
 {
-    // calc hash of {0, 0, 0}
     auto zleaf_hash = leaf({ 0, 0, 0 }).hash();
     for (size_t i = 0; i < total_size_; i++) {
         hashes_[i] = zleaf_hash;
@@ -60,6 +68,9 @@ IndexedMerkleTree::IndexedMerkleTree(size_t depth)
         level_str_idxs_.push_back(prev + (1 << (depth_ - (i - 1))));
     }
 
+    hstats_.resize(total_size_ * 2 - 2);
+    hstats_.assign(hstats_.size(), node_status::DIRTY);
+
     leaves_ = { { 0, 0, 0 } };
     init_hashes();
     calculate_root();
@@ -73,9 +84,6 @@ fr_hash_path IndexedMerkleTree::get_hash_path(size_t idx)
 {
     // Exercise: fill the hash path for a given index.
     fr_hash_path path(depth_);
-    // calculate_hashes
-    build_hashes_from_leaves();
-    calculate_root();
 
     path[0] = idx % 2 ? std::make_pair(hashes_[idx - 1], hashes_[idx]) : std::make_pair(hashes_[idx], hashes_[idx + 1]);
 
@@ -110,29 +118,38 @@ fr IndexedMerkleTree::update_element(fr const& val)
 {
     // Exercise: add a new leaf with value `value` to the tree.
     auto cur_idx = leaves_.size();
-    if (cur_idx < total_size_) {
-        index_t next_idx;
-        fr next_value;
-        size_t idx = 0;
 
-        while (true) {
-            if ((uint64_t)leaves_[idx].nextValue >= (uint64_t)val || leaves_[idx].nextValue == 0) {
-                if ((uint64_t)leaves_[idx].nextValue == (uint64_t)val)
-                    return 0;
-                next_idx = leaves_[idx].nextIndex;
-                next_value = leaves_[idx].nextValue;
-                leaves_[idx].nextValue = val;
-                leaves_[idx].nextIndex = cur_idx;
-                break;
-            }
+    if (cur_idx >= total_size_)
+        return 0;
 
-            idx = static_cast<size_t>(leaves_[idx].nextIndex);
+    index_t next_idx;
+    fr next_value;
+    size_t idx = 0;
+
+    while (true) {
+        if ((uint64_t)leaves_[idx].nextValue == (uint64_t)val)
+            return 0;
+
+        if ((uint64_t)leaves_[idx].nextValue > (uint64_t)val || leaves_[idx].nextValue == 0) {
+            next_idx = leaves_[idx].nextIndex;
+            next_value = leaves_[idx].nextValue;
+            leaves_[idx].nextValue = val;
+            leaves_[idx].nextIndex = cur_idx;
+            break;
         }
 
-        leaves_.push_back(leaf({ val, next_idx, next_value }));
-        hashes_[cur_idx] = leaves_[cur_idx].hash();
-        hashes_[idx] = leaves_[idx].hash();
+        idx = static_cast<size_t>(leaves_[idx].nextIndex);
     }
+
+    leaves_.push_back(leaf({ val, next_idx, next_value }));
+
+    hashes_[cur_idx] = leaves_[cur_idx].hash();
+    hashes_[idx] = leaves_[idx].hash();
+    hstats_[idx] = node_status::DIRTY;
+    hstats_[cur_idx] = node_status::DIRTY;
+
+    build_hashes_from_leaves();
+    calculate_root();
 
     return 0;
 }

@@ -106,6 +106,12 @@ class IndexedMerkleTree {
     std::vector<barretenberg::fr> hashes_;
 
     std::vector<size_t> level_str_idxs_;
+
+    enum class node_status : uint8_t {
+        DIRTY = 0,
+        CLEAN = 1,
+    };
+    std::vector<node_status> hstats_;
 };
 
 } // namespace indexed_merkle_tree
