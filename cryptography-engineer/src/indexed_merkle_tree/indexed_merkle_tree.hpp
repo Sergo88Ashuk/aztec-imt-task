@@ -81,9 +81,11 @@ class IndexedMerkleTree {
 
     const std::vector<barretenberg::fr>& get_hashes() { return hashes_; }
     const std::vector<leaf>& get_leaves() { return leaves_; }
-    void init_hashes(std::vector<barretenberg::fr>& hashes);
-    void calculate_root(const std::vector<barretenberg::fr>& hashes);
-    void rehash(std::vector<barretenberg::fr>& hashes);
+
+  private:
+    void init_hashes();
+    void calculate_root();
+    void build_hashes_from_leaves();
 
   private:
     // The depth or height of the tree
@@ -102,6 +104,8 @@ class IndexedMerkleTree {
     // Vector that stores all the leaf hashes as well as intermediate node values
     // Size: total_size_ + (total_size_ / 2) + (total_size_ / 4) + ... + 2 = 2 * total_size_ - 2
     std::vector<barretenberg::fr> hashes_;
+
+    std::vector<size_t> level_str_idxs_;
 };
 
 } // namespace indexed_merkle_tree

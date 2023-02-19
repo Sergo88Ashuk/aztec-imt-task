@@ -5,79 +5,41 @@ namespace plonk {
 namespace stdlib {
 namespace indexed_merkle_tree {
 
-void IndexedMerkleTree::rehash(std::vector<barretenberg::fr>& hashes)
+void IndexedMerkleTree::build_hashes_from_leaves()
 {
-    // create vector of height str idxs, for depth = 3: { 0 , 8 , 12 }
-    //                                                    + (1 << 3), + (1 << 2)
-    //                                       depth = 4: { 0 , 16, 24 , 28 }
-    std::vector<size_t> level_str_idxs{};
-    level_str_idxs.push_back(0);
-    for (size_t i = 1; i < depth_; i++) {
-        size_t prev = level_str_idxs[i - 1];
-        level_str_idxs.push_back(prev + (1 << (depth_ - (i - 1))));
-    }
-
-    // TODO: move into separate func (smth like 'hash_range' [vector of indexes])
-    for (size_t i = total_size_; i < hashes.size(); i++) {
+    for (size_t i = total_size_; i < hashes_.size(); i++) {
         size_t level_str_idx{};
         size_t prev_level_str_idx{};
-        for (size_t l = 0; l < level_str_idxs.size(); l++) {
-            auto lsi = level_str_idxs[l];
+        for (size_t l = 0; l < level_str_idxs_.size(); l++) {
+            auto lsi = level_str_idxs_[l];
             if (i >= lsi) {
                 level_str_idx = lsi;
                 if (l > 0)
-                    prev_level_str_idx = level_str_idxs[l - 1];
+                    prev_level_str_idx = level_str_idxs_[l - 1];
             }
         }
         auto in_level_idx = i - level_str_idx;
         auto ch_base_idx = prev_level_str_idx + in_level_idx * 2;
-        auto rchld = hashes[ch_base_idx];
-        auto lchld = hashes[ch_base_idx + 1];
-        hashes[i] = compress_pair(rchld, lchld);
+        auto rchld = hashes_[ch_base_idx];
+        auto lchld = hashes_[ch_base_idx + 1];
+        hashes_[i] = compress_pair(rchld, lchld);
     }
 }
-void IndexedMerkleTree::init_hashes(std::vector<barretenberg::fr>& hashes)
+void IndexedMerkleTree::init_hashes()
 {
     // calc hash of {0, 0, 0}
     auto zleaf_hash = leaf({ 0, 0, 0 }).hash();
     for (size_t i = 0; i < total_size_; i++) {
-        hashes[i] = zleaf_hash;
+        hashes_[i] = zleaf_hash;
     }
 
-    // create vector of height str idxs, for depth = 3: { 0 , 8 , 12 }
-    //                                                    + (1 << 3), + (1 << 2)
-    //                                       depth = 4: { 0 , 16, 24 , 28 }
-    std::vector<size_t> level_str_idxs{};
-    level_str_idxs.push_back(0);
-    for (size_t i = 1; i < depth_; i++) {
-        size_t prev = level_str_idxs[i - 1];
-        level_str_idxs.push_back(prev + (1 << (depth_ - (i - 1))));
-    }
-
-    // TODO: move into separate func (smth like 'hash_range' [vector of indexes])
-    for (size_t i = total_size_; i < hashes.size(); i++) {
-        size_t level_str_idx{};
-        size_t prev_level_str_idx{};
-        for (size_t l = 0; l < level_str_idxs.size(); l++) {
-            auto lsi = level_str_idxs[l];
-            if (i >= lsi) {
-                level_str_idx = lsi;
-                if (l > 0)
-                    prev_level_str_idx = level_str_idxs[l - 1];
-            }
-        }
-        auto in_level_idx = i - level_str_idx;
-        auto ch_base_idx = prev_level_str_idx + in_level_idx * 2;
-        auto rchld = hashes[ch_base_idx];
-        auto lchld = hashes[ch_base_idx + 1];
-        hashes[i] = compress_pair(rchld, lchld);
-    }
+    build_hashes_from_leaves();
 }
 
-void IndexedMerkleTree::calculate_root(const std::vector<barretenberg::fr>& hashes)
+void IndexedMerkleTree::calculate_root()
 {
-    size_t hs = hashes.size();
-    root_ = compress_native(hashes[hs - 2], hashes[hs - 1]);
+    size_t hs = hashes_.size();
+    root_ = compress_native(hashes_[hs - 2], hashes_[hs - 1]);
 }
 
 /**
@@ -92,10 +54,15 @@ IndexedMerkleTree::IndexedMerkleTree(size_t depth)
     hashes_.resize(total_size_ * 2 - 2);
 
     // Exercise: Build the initial state of the entire tree.
+    level_str_idxs_.push_back(0);
+    for (size_t i = 1; i < depth_; i++) {
+        size_t prev = level_str_idxs_[i - 1];
+        level_str_idxs_.push_back(prev + (1 << (depth_ - (i - 1))));
+    }
+
     leaves_ = { { 0, 0, 0 } };
-    // calc hashes_
-    init_hashes(hashes_);
-    calculate_root(hashes_);
+    init_hashes();
+    calculate_root();
 }
 
 /**
@@ -107,29 +74,16 @@ fr_hash_path IndexedMerkleTree::get_hash_path(size_t idx)
     // Exercise: fill the hash path for a given index.
     fr_hash_path path(depth_);
     // calculate_hashes
-    rehash(hashes_);
-    // calculate_root
-    calculate_root(hashes_);
-    // create vector of height str idxs, for depth = 3: { 0 , 8 , 12 }
-    //                                                    + (1 << 3), + (1 << 2)
-    //                                       depth = 4: { 0 , 16, 24 , 28 }
-    std::vector<size_t> level_str_idxs{};
-    level_str_idxs.push_back(0);
-    for (size_t i = 1; i < depth_; i++) {
-        size_t prev = level_str_idxs[i - 1];
-        level_str_idxs.push_back(prev + (1 << (depth_ - (i - 1))));
-    }
+    build_hashes_from_leaves();
+    calculate_root();
 
-    auto h0 = idx % 2 ? hashes_[idx - 1] : hashes_[idx];
-    auto h1 = idx % 2 ? hashes_[idx] : hashes_[idx + 1];
-    path[0] = std::make_pair(h0, h1);
+    path[0] = idx % 2 ? std::make_pair(hashes_[idx - 1], hashes_[idx]) : std::make_pair(hashes_[idx], hashes_[idx + 1]);
 
     for (size_t l = 1; l < depth_; l++) {
         size_t parent_idx = idx / 2;
-        idx = level_str_idxs[1] + parent_idx;
-        auto h0 = idx % 2 ? hashes_[idx - 1] : hashes_[idx];
-        auto h1 = idx % 2 ? hashes_[idx] : hashes_[idx + 1];
-        path[l] = std::make_pair(h0, h1);
+        idx = level_str_idxs_[1] + parent_idx;
+        path[l] =
+            idx % 2 ? std::make_pair(hashes_[idx - 1], hashes_[idx]) : std::make_pair(hashes_[idx], hashes_[idx + 1]);
     }
 
     return path;
